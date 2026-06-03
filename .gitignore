@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+
+# Data files (user-specific)
+data/*.csv
+data/.cache/
+example_data/
+imports/**/*.csv
+
+# Streamlit
+.streamlit/
+
+# OS
+.DS_Store
