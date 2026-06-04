@@ -13,6 +13,7 @@ from data.retirement_sim import (
     run_simple_monte_carlo,
     run_tax_optimized_monte_carlo,
 )
+from data.config import load_retirement_defaults, save_retirement_defaults
 
 # Account type → tax bucket mapping
 BUCKET_MAP = {
@@ -163,7 +164,9 @@ def _render_mc_results(mc_results: dict, retirement_age: int, lifespan: int,
 def render():
     st.header("Retirement Planner")
 
-    # ── Input Parameters ──────────────────────────────────────────────────────
+    cfg = load_retirement_defaults()
+
+    # ── Input Parameters ────────────────────────────────────────────────────────
     with st.expander("Settings", expanded=True):
         col_a, col_b = st.columns(2)
 
@@ -171,20 +174,20 @@ def render():
             st.markdown("**Returns**")
             expected_return = st.number_input(
                 "Expected real return (%)", min_value=0.0, max_value=30.0,
-                value=5.0, step=0.5, key="ret_return",
+                value=cfg["expected_return"], step=0.5, key="ret_return",
                 help="Inflation-adjusted. All values in today's dollars."
             ) / 100
 
             st.markdown("**Age**")
             c1, c2, c3 = st.columns(3)
-            current_age = c1.number_input("Current", min_value=18, max_value=100, value=30, key="ret_age")
-            retirement_age = c2.number_input("Retire at", min_value=18, max_value=100, value=50, key="ret_retire_age")
-            lifespan = c3.number_input("Plan to age", min_value=50, max_value=120, value=90, key="ret_lifespan")
+            current_age = c1.number_input("Current", min_value=18, max_value=100, value=cfg["current_age"], key="ret_age")
+            retirement_age = c2.number_input("Retire at", min_value=18, max_value=100, value=cfg["retirement_age"], key="ret_retire_age")
+            lifespan = c3.number_input("Plan to age", min_value=50, max_value=120, value=cfg["lifespan"], key="ret_lifespan")
 
         with col_b:
             st.markdown("**Pre-Retirement Income**")
             annual_income = st.number_input(
-                "Annual income ($)", min_value=0.0, value=100000.0, step=5000.0,
+                "Annual income ($)", min_value=0.0, value=cfg["annual_income"], step=5000.0,
                 key="ret_annual_income",
                 help="W-2/salary income before retirement. Sets the marginal tax bracket "
                      "for Roth conversions during accumulation. Tax on this income itself "
@@ -192,16 +195,18 @@ def render():
             )
 
             st.markdown("**Withdrawal**")
-            wd_mode = st.radio("Withdrawal mode", ["Rate (%)", "Fixed amount ($)"], horizontal=True, key="ret_wd_mode")
+            wd_modes = ["Rate (%)", "Fixed amount ($)"]
+            wd_mode = st.radio("Withdrawal mode", wd_modes, horizontal=True, key="ret_wd_mode",
+                               index=wd_modes.index(cfg["withdrawal_mode"]) if cfg["withdrawal_mode"] in wd_modes else 0)
             if wd_mode == "Rate (%)":
                 withdrawal_rate = st.number_input(
                     "Withdrawal rate (%)", min_value=0.0, max_value=20.0,
-                    value=3.5, step=0.5, key="ret_wd_rate"
+                    value=cfg["withdrawal_rate"], step=0.5, key="ret_wd_rate"
                 ) / 100
                 withdrawal_amount = None
             else:
                 withdrawal_amount = st.number_input(
-                    "Annual withdrawal ($)", min_value=0.0, value=60000.0,
+                    "Annual withdrawal ($)", min_value=0.0, value=cfg["withdrawal_amount"],
                     step=5000.0, key="ret_wd_amount"
                 )
                 withdrawal_rate = 0.04  # unused but need default
@@ -209,10 +214,10 @@ def render():
             st.markdown("**Social Security**")
             sc1, sc2 = st.columns(2)
             ss_annual = sc1.number_input(
-                "Annual SS ($)", min_value=0.0, value=0.0, step=1000.0, key="ret_ss"
+                "Annual SS ($)", min_value=0.0, value=cfg["ss_annual"], step=1000.0, key="ret_ss"
             )
             ss_start_age = sc2.number_input(
-                "SS start age", min_value=62, max_value=70, value=67, key="ret_ss_age"
+                "SS start age", min_value=62, max_value=70, value=cfg["ss_start_age"], key="ret_ss_age"
             )
 
     # ── Account Balances ──────────────────────────────────────────────────────
@@ -230,7 +235,7 @@ def render():
         total_bal = taxable_bal + pretax_bal + roth_bal + aftertax_bal
 
         cost_basis_pct = st.slider(
-            "Taxable cost basis %", min_value=0, max_value=100, value=50, key="ret_cb_pct"
+            "Taxable cost basis %", min_value=0, max_value=100, value=cfg["cost_basis_pct"], key="ret_cb_pct"
         ) / 100
 
         roth_contribs = st.number_input(
@@ -246,16 +251,36 @@ def render():
     with st.expander("Annual Contributions (stop at retirement)"):
         st.caption("Enter annual amounts — applied once per year in the simulation. Contributions stop at retirement.")
         cc1, cc2, cc3, cc4 = st.columns(4)
-        contrib_taxable = cc1.number_input("Taxable", min_value=0.0, value=0.0, step=1000.0, key="ret_c_taxable")
-        contrib_pretax = cc2.number_input("Pre-Tax", min_value=0.0, value=30500.0, step=1000.0, key="ret_c_pretax",
+        contrib_taxable = cc1.number_input("Taxable", min_value=0.0, value=cfg["contrib_taxable"], step=1000.0, key="ret_c_taxable")
+        contrib_pretax = cc2.number_input("Pre-Tax", min_value=0.0, value=cfg["contrib_pretax"], step=1000.0, key="ret_c_pretax",
                                               help="401k max ($24,500) + employer match ($6,000)")
-        contrib_roth = cc3.number_input("Roth", min_value=0.0, value=53400.0, step=1000.0, key="ret_c_roth",
+        contrib_roth = cc3.number_input("Roth", min_value=0.0, value=cfg["contrib_roth"], step=1000.0, key="ret_c_roth",
                                          help="Mega Backdoor Roth ($41,500) + Backdoor Roth IRA ($7,500) + HSA ($4,400)")
-        contrib_aftertax = cc4.number_input("After-Tax", min_value=0.0, value=0.0, step=1000.0, key="ret_c_aftertax")
+        contrib_aftertax = cc4.number_input("After-Tax", min_value=0.0, value=cfg["contrib_aftertax"], step=1000.0, key="ret_c_aftertax")
         total_contrib = contrib_taxable + contrib_pretax + contrib_roth + contrib_aftertax
 
     total_bal_placeholder.markdown(f"**Total Portfolio Balance: {fmtd(total_bal, decimals=0)}**")
     total_contrib_placeholder.markdown(f"**Total Annual Contributions: {fmtd(total_contrib, decimals=0)}**")
+
+    if st.button("Save as Defaults", key="ret_save_defaults"):
+        save_retirement_defaults({
+            "expected_return": expected_return * 100,
+            "current_age": current_age,
+            "retirement_age": retirement_age,
+            "lifespan": lifespan,
+            "annual_income": annual_income,
+            "withdrawal_mode": wd_mode,
+            "withdrawal_rate": withdrawal_rate * 100 if wd_mode == "Rate (%)" else cfg["withdrawal_rate"],
+            "withdrawal_amount": withdrawal_amount if withdrawal_amount else cfg["withdrawal_amount"],
+            "ss_annual": ss_annual,
+            "ss_start_age": ss_start_age,
+            "cost_basis_pct": int(cost_basis_pct * 100),
+            "contrib_taxable": contrib_taxable,
+            "contrib_pretax": contrib_pretax,
+            "contrib_roth": contrib_roth,
+            "contrib_aftertax": contrib_aftertax,
+        })
+        st.success("Defaults saved.")
 
     # Build params
     params = RetirementParams(
@@ -280,24 +305,11 @@ def render():
         roth_contributions=roth_contribs,
     )
 
-    # Show cross-reference: rate ↔ amount
-    cur_total = params.initial_total
-    annual_contrib = contrib_taxable + contrib_pretax + contrib_roth + contrib_aftertax
-    years_to_retire = max(retirement_age - current_age, 0)
+    # Show withdrawal mode summary
     if wd_mode == "Rate (%)":
-        # Estimate balance at retirement: grow current balance + contributions
-        est_retire_bal = cur_total * (1 + expected_return) ** years_to_retire
-        if expected_return > 0 and years_to_retire > 0:
-            est_retire_bal += annual_contrib * ((1 + expected_return) ** years_to_retire - 1) / expected_return
-        else:
-            est_retire_bal += annual_contrib * years_to_retire
-        equiv_amount = est_retire_bal * withdrawal_rate
-        st.caption(
-            f"Withdrawal: {withdrawal_rate*100:.1f}% of estimated retirement balance "
-            f"{fmtd(est_retire_bal, decimals=0)} = **{fmtd(equiv_amount, decimals=0)}/yr**"
-        )
+        st.caption(f"Withdrawal: **{withdrawal_rate*100:.1f}%** of portfolio at retirement (standard of living)")
     else:
-        st.caption(f"Withdrawal: **{fmtd(withdrawal_amount, decimals=0)}/yr**")
+        st.caption(f"Withdrawal: **{fmtd(withdrawal_amount, decimals=0)}/yr** (standard of living)")
 
     dollar_label = "real dollars"
 
@@ -427,12 +439,13 @@ def render():
         total_taxes = sum(r.taxes_paid for r in tax_results)
         total_conversions = sum(r.roth_conversion for r in tax_results)
 
-        tc1, tc2, tc3, tc4 = st.columns(4)
+        tc1, tc2, tc3, tc4, tc5 = st.columns(5)
         if retire_row_t:
             tc1.metric("At Retirement", fmtd(retire_row_t.total, decimals=0))
-        tc2.metric(f"At Age {lifespan}", fmtd(end_row_t.total, decimals=0))
-        tc3.metric("Lifetime Taxes", fmtd(total_taxes, decimals=0))
-        tc4.metric("Total Roth Converted", fmtd(total_conversions, decimals=0))
+            tc2.metric("Annual Withdrawal", fmtd(retire_row_t.gross_withdrawal, decimals=0) + "/yr")
+        tc3.metric(f"At Age {lifespan}", fmtd(end_row_t.total, decimals=0))
+        tc4.metric("Lifetime Taxes", fmtd(total_taxes, decimals=0))
+        tc5.metric("Total Roth Converted", fmtd(total_conversions, decimals=0))
 
         with st.expander("Decision Walkthrough"):
             st.caption(
@@ -466,7 +479,7 @@ def render():
                          "wd_taxable", "wd_pretax", "wd_roth", "wd_aftertax"]],
                 use_container_width=True, hide_index=True,
                 column_config={
-                    "gross_withdrawal": st.column_config.NumberColumn("Std of Living", format="$%,.0f"),
+                    "gross_withdrawal": st.column_config.NumberColumn("Gross WD", format="$%,.0f"),
                     "ss_income": st.column_config.NumberColumn("SS", format="$%,.0f"),
                     "spending": st.column_config.NumberColumn("From Portfolio", format="$%,.0f"),
                     "spending_taxes": st.column_config.NumberColumn("Spend Tax", format="$%,.0f"),
