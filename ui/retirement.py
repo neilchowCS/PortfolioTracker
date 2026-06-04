@@ -305,11 +305,22 @@ def render():
         roth_contributions=roth_contribs,
     )
 
-    # Show withdrawal mode summary
-    if wd_mode == "Rate (%)":
-        st.caption(f"Withdrawal: **{withdrawal_rate*100:.1f}%** of portfolio at retirement (standard of living)")
+    # Compute withdrawal amount from the simple projection (actual retirement balance)
+    _simple_for_wd = run_simple_projection(params)
+    _retire_row_wd = next((r for r in _simple_for_wd if r.age == retirement_age), None)
+    if _retire_row_wd and _retire_row_wd.total > 0:
+        annual_wd = _retire_row_wd.total * withdrawal_rate if withdrawal_amount is None else withdrawal_amount
     else:
-        st.caption(f"Withdrawal: **{fmtd(withdrawal_amount, decimals=0)}/yr** (standard of living)")
+        annual_wd = withdrawal_amount or 0
+
+    if wd_mode == "Rate (%)":
+        st.caption(
+            f"Withdrawal: **{withdrawal_rate*100:.1f}%** × "
+            f"{fmtd(_retire_row_wd.total if _retire_row_wd else 0, decimals=0)} = "
+            f"**{fmtd(annual_wd, decimals=0)}/yr**"
+        )
+    else:
+        st.caption(f"Withdrawal: **{fmtd(withdrawal_amount, decimals=0)}/yr**")
 
     dollar_label = "real dollars"
 
@@ -344,13 +355,10 @@ def render():
 
         retire_row = next((r for r in simple_results if r.age == retirement_age), None)
         end_row = simple_results[-1]
-        mc1, mc2, mc3 = st.columns(3)
+        mc1, mc2 = st.columns(2)
         if retire_row:
             mc1.metric("At Retirement", fmtd(retire_row.total, decimals=0))
         mc2.metric(f"At Age {lifespan}", fmtd(end_row.total, decimals=0))
-        if retire_row and retire_row.total > 0:
-            annual_wd = retire_row.total * withdrawal_rate if withdrawal_amount is None else withdrawal_amount
-            mc3.metric("Annual Withdrawal", fmtd(annual_wd, decimals=0))
 
         with st.expander("Year-by-Year Table"):
             st.dataframe(
@@ -439,13 +447,12 @@ def render():
         total_taxes = sum(r.taxes_paid for r in tax_results)
         total_conversions = sum(r.roth_conversion for r in tax_results)
 
-        tc1, tc2, tc3, tc4, tc5 = st.columns(5)
+        tc1, tc2, tc3, tc4 = st.columns(4)
         if retire_row_t:
             tc1.metric("At Retirement", fmtd(retire_row_t.total, decimals=0))
-            tc2.metric("Annual Withdrawal", fmtd(retire_row_t.gross_withdrawal, decimals=0) + "/yr")
-        tc3.metric(f"At Age {lifespan}", fmtd(end_row_t.total, decimals=0))
-        tc4.metric("Lifetime Taxes", fmtd(total_taxes, decimals=0))
-        tc5.metric("Total Roth Converted", fmtd(total_conversions, decimals=0))
+        tc2.metric(f"At Age {lifespan}", fmtd(end_row_t.total, decimals=0))
+        tc3.metric("Lifetime Taxes", fmtd(total_taxes, decimals=0))
+        tc4.metric("Total Roth Converted", fmtd(total_conversions, decimals=0))
 
         with st.expander("Decision Walkthrough"):
             st.caption(
