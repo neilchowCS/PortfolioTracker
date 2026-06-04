@@ -459,28 +459,39 @@ def render():
                         st.markdown(f"  - **Withdrawal sources:** {' · '.join(sources)}")
 
         with st.expander("Year-by-Year Table"):
+            st.markdown("**Spending**")
             st.dataframe(
-                df_tax[["age", "taxable", "pretax", "roth", "aftertax", "total",
-                         "contributions", "withdrawal",
-                         "wd_taxable", "wd_pretax", "wd_roth", "wd_aftertax",
-                         "roth_conversion", "taxes_paid", "ss_income", "net_income"]],
+                df_tax[["age", "gross_withdrawal", "ss_income", "spending",
+                         "spending_taxes", "withdrawal",
+                         "wd_taxable", "wd_pretax", "wd_roth", "wd_aftertax"]],
                 use_container_width=True, hide_index=True,
                 column_config={
+                    "gross_withdrawal": st.column_config.NumberColumn("Std of Living", format="$%,.0f"),
+                    "ss_income": st.column_config.NumberColumn("SS", format="$%,.0f"),
+                    "spending": st.column_config.NumberColumn("From Portfolio", format="$%,.0f"),
+                    "spending_taxes": st.column_config.NumberColumn("Spend Tax", format="$%,.0f"),
+                    "withdrawal": st.column_config.NumberColumn("Total Pull", format="$%,.0f"),
+                    "wd_taxable": st.column_config.NumberColumn("Taxable", format="$%,.0f"),
+                    "wd_pretax": st.column_config.NumberColumn("Pre-Tax", format="$%,.0f"),
+                    "wd_roth": st.column_config.NumberColumn("Roth", format="$%,.0f"),
+                    "wd_aftertax": st.column_config.NumberColumn("After-Tax", format="$%,.0f"),
+                },
+            )
+            st.markdown("**Roth Conversions & Balances**")
+            st.dataframe(
+                df_tax[["age", "roth_conversion", "conversion_taxes",
+                         "taxable", "pretax", "roth", "aftertax", "total",
+                         "contributions"]],
+                use_container_width=True, hide_index=True,
+                column_config={
+                    "roth_conversion": st.column_config.NumberColumn("Conversion", format="$%,.0f"),
+                    "conversion_taxes": st.column_config.NumberColumn("Conv Tax", format="$%,.0f"),
                     "taxable": st.column_config.NumberColumn("Taxable", format="$%,.0f"),
                     "pretax": st.column_config.NumberColumn("Pre-Tax", format="$%,.0f"),
                     "roth": st.column_config.NumberColumn("Roth", format="$%,.0f"),
                     "aftertax": st.column_config.NumberColumn("After-Tax", format="$%,.0f"),
                     "total": st.column_config.NumberColumn("Total", format="$%,.0f"),
                     "contributions": st.column_config.NumberColumn("Contributions", format="$%,.0f"),
-                    "withdrawal": st.column_config.NumberColumn("Withdrawal", format="$%,.0f"),
-                    "wd_taxable": st.column_config.NumberColumn("WD Taxable", format="$%,.0f"),
-                    "wd_pretax": st.column_config.NumberColumn("WD Pre-Tax", format="$%,.0f"),
-                    "wd_roth": st.column_config.NumberColumn("WD Roth", format="$%,.0f"),
-                    "wd_aftertax": st.column_config.NumberColumn("WD After-Tax", format="$%,.0f"),
-                    "roth_conversion": st.column_config.NumberColumn("Roth Conv.", format="$%,.0f"),
-                    "taxes_paid": st.column_config.NumberColumn("Taxes", format="$%,.0f"),
-                    "ss_income": st.column_config.NumberColumn("SS", format="$%,.0f"),
-                    "net_income": st.column_config.NumberColumn("Net Income", format="$%,.0f"),
                 },
             )
 

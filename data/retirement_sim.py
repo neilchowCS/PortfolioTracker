@@ -139,16 +139,19 @@ class YearResult:
     roth: float = 0
     aftertax: float = 0
     total: float = 0
-    withdrawal: float = 0
+    gross_withdrawal: float = 0  # target withdrawal before SS offset (the % rate amount)
+    spending: float = 0          # net spending = gross_withdrawal - spending_taxes (= what you live on)
+    withdrawal: float = 0        # total pulled from accounts for spending (spending + spending_taxes)
     wd_taxable: float = 0
     wd_pretax: float = 0
     wd_roth: float = 0
     wd_aftertax: float = 0
     roth_conversion: float = 0
-    taxes_paid: float = 0
-    conversion_taxes: float = 0  # portion of taxes from Roth conversions (deducted from portfolio)
+    taxes_paid: float = 0        # total taxes (spending + conversion)
+    spending_taxes: float = 0    # taxes from withdrawal income only
+    conversion_taxes: float = 0  # taxes from Roth conversions (deducted from portfolio)
     ss_income: float = 0
-    net_income: float = 0
+    net_income: float = 0        # spending + SS (what you actually live on)
     contributions: float = 0
     notes: str = ""
 
@@ -480,10 +483,15 @@ def _run_forward_pass(p: RetirementParams, shadow: list[dict]) -> list[YearResul
         roth_accessible = _accessible_roth(roth, roth_contribs, roth_conv_list, sim_year, age)
 
         # ── Withdrawal need ────────────────────────────────────────────
+        # fixed_wd = standard of living (net spending target, flat in real $).
+        # SS offsets the amount the portfolio must provide.
+        # Portfolio pull = max(spending - SS, 0), then gross-up for taxes.
         total = taxable + pretax + roth + aftertax
+        gross_wd = 0.0  # the standard-of-living spending target
         if is_retired:
             if fixed_wd is None:
                 fixed_wd = p.fixed_withdrawal_for(total)
+            gross_wd = fixed_wd
             if total > 0:
                 gross_need = max(fixed_wd - ss, 0)
             else:
@@ -657,18 +665,20 @@ def _run_forward_pass(p: RetirementParams, shadow: list[dict]) -> list[YearResul
 
         # Run with gross-up iteration
         if gross_need > 0:
-            spending_need = gross_need
+            spending_need = gross_need  # net amount portfolio must provide
             total_avail = taxable + pretax + roth + aftertax
-            notes.append(f"Spending ${spending_need:,.0f} (after SS ${ss:,.0f})")
+            notes.append(f"Living ${fixed_wd:,.0f} (SS ${ss:,.0f}, portfolio ${spending_need:,.0f})")
             inaccessible_roth = roth - roth_accessible
             if inaccessible_roth > 1:
                 notes.append(f"Roth ${inaccessible_roth:,.0f} inaccessible (earnings/immature conversions)")
 
-            # Gross-up: withdraw enough to cover spending + taxes
+            # Gross-up: withdraw enough to cover spending + spending taxes.
+            # Conversion tax is separate (paid from portfolio but not for spending).
             target = spending_need
             for _ in range(5):
                 wd_plan, conv_plan, tax_plan, ctax_plan, ord_plan, bal_plan = _run_greedy(target)
-                new_target = min(spending_need + tax_plan, total_avail)
+                spend_tax_est = tax_plan - ctax_plan  # taxes on spending withdrawals only
+                new_target = min(spending_need + spend_tax_est, total_avail)
                 if abs(new_target - target) < 1:
                     break
                 target = new_target
@@ -704,10 +714,11 @@ def _run_forward_pass(p: RetirementParams, shadow: list[dict]) -> list[YearResul
                     else:
                         notes.append(f"WD ${wd_plan[src]:,.0f} {src}")
 
-            if withdrawn < spending_need + taxes:
-                shortfall = spending_need + taxes - withdrawn
+            spend_tax_actual = taxes - conv_tax_paid
+            if withdrawn < spending_need + spend_tax_actual:
+                shortfall = spending_need + spend_tax_actual - withdrawn
                 notes.append(f"SHORTFALL ${shortfall:,.0f}")
-            notes.append(f"Total pulled ${withdrawn:,.0f} (spending ${spending_need:,.0f} + tax ${taxes:,.0f})")
+            notes.append(f"Pull ${withdrawn:,.0f} (spend ${spending_need:,.0f} + spend-tax ${spend_tax_actual:,.0f}) | conv ${conv_plan:,.0f} conv-tax ${conv_tax_paid:,.0f}")
 
         else:
             # No spending need — still do Roth conversions if beneficial
@@ -740,19 +751,27 @@ def _run_forward_pass(p: RetirementParams, shadow: list[dict]) -> list[YearResul
         aftertax = max(aftertax * (1 + annual_return), 0)
         total = taxable + pretax + roth + aftertax
 
+        spend_tax = taxes - conv_tax_paid
+        spending_out = max(withdrawn - spend_tax, 0)  # net spending from portfolio
+
         results.append(YearResult(
             age=age, year=y,
             taxable=round(taxable, 2), pretax=round(pretax, 2),
             roth=round(roth, 2), aftertax=round(aftertax, 2),
-            total=round(total, 2), withdrawal=round(withdrawn, 2),
+            total=round(total, 2),
+            gross_withdrawal=round(gross_wd, 2),
+            spending=round(spending_out, 2),
+            withdrawal=round(withdrawn, 2),
             wd_taxable=round(wd_breakdown["taxable"], 2),
             wd_pretax=round(wd_breakdown["pretax"], 2),
             wd_roth=round(wd_breakdown["roth"], 2),
             wd_aftertax=round(wd_breakdown["aftertax"], 2),
-            roth_conversion=round(roth_conversion, 2), taxes_paid=round(taxes, 2),
+            roth_conversion=round(roth_conversion, 2),
+            taxes_paid=round(taxes, 2),
+            spending_taxes=round(spend_tax, 2),
             conversion_taxes=round(conv_tax_paid, 2),
             ss_income=round(ss, 2),
-            net_income=round(withdrawn - (taxes - conv_tax_paid) + ss, 2),
+            net_income=round(spending_out + ss, 2),
             contributions=round(annual_contrib, 2),
             notes=" | ".join(notes) if notes else ("accumulation" if not is_retired else ""),
         ))
