@@ -306,21 +306,23 @@ def render():
     )
 
     # Compute withdrawal amount from the simple projection (actual retirement balance)
+    # Lock this as a fixed dollar amount so all sims use the same number.
     _simple_for_wd = run_simple_projection(params)
     _retire_row_wd = next((r for r in _simple_for_wd if r.age == retirement_age), None)
     if _retire_row_wd and _retire_row_wd.total > 0:
         annual_wd = _retire_row_wd.total * withdrawal_rate if withdrawal_amount is None else withdrawal_amount
     else:
         annual_wd = withdrawal_amount or 0
+    params.withdrawal_amount = annual_wd  # all sims use same withdrawal
 
     if wd_mode == "Rate (%)":
-        st.caption(
-            f"Withdrawal: **{withdrawal_rate*100:.1f}%** × "
+        st.markdown(
+            f"Withdrawal: {withdrawal_rate*100:.1f}% × "
             f"{fmtd(_retire_row_wd.total if _retire_row_wd else 0, decimals=0)} = "
             f"**{fmtd(annual_wd, decimals=0)}/yr**"
         )
     else:
-        st.caption(f"Withdrawal: **{fmtd(withdrawal_amount, decimals=0)}/yr**")
+        st.markdown(f"Withdrawal: **{fmtd(annual_wd, decimals=0)}/yr**")
 
     dollar_label = "real dollars"
 
